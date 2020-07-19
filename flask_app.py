@@ -3,6 +3,7 @@
 from flask import Flask, request
 from secrets import TARGET_CHAT_ID
 from datetime import datetime
+import json
 
 app = Flask(__name__)
 
@@ -14,9 +15,10 @@ def hello_world():
 
 @app.route('/bot', methods=['POST'])
 def get_update():
-    with open('requests.log', 'ta', encoding='utf8') as file:
-        print(datetime.today(), request.get_data(as_text=True), file=file, end='\n\n')
     js = request.json
+    with open('requests.log', 'ta', encoding='utf8') as file:
+        print('\n\n',datetime.today(), file=file, sep='')
+        json.dump(js, file, ensure_ascii=False, indent=4)
     if 'message' in js:
         chat_id = js['message']['chat']['id']
         result = {
@@ -27,7 +29,12 @@ def get_update():
             "ok": True
         }
         if chat_id == TARGET_CHAT_ID:
-            result['chat_id'] = js['message']['reply_to_message']['forward_from']['id']
+            try:
+                result['chat_id'] = js['message']['reply_to_message']['forward_from']['id']
+            except KeyError:
+                result['method'] = 'sendMessage'
+                result['text'] = 'Так не работает. Можно только отвечать на пересланные сообщения.'
+                result['reply_to_message_id'] = js['message']['message_id']
         # print(js['message'])
         return result
     else:

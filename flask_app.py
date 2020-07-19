@@ -1,20 +1,22 @@
-
 # A very simple Flask Hello World app for you to get started with...
 
 from flask import Flask, request
 from secrets import TARGET_CHAT_ID
-import json
+from datetime import datetime
 
 app = Flask(__name__)
+
 
 @app.route('/')
 def hello_world():
     return 'Test site is working!'
 
+
 @app.route('/bot', methods=['POST'])
 def get_update():
+    with open('requests.log', 'ta', encoding='utf8') as file:
+        print(datetime.today(), request.get_data(as_text=True), file=file, end='\n\n')
     js = request.json
-    print(request.get_data(as_text=True))
     if 'message' in js:
         chat_id = js['message']['chat']['id']
         result = {
@@ -30,6 +32,7 @@ def get_update():
         return result
     else:
         return {"ok": True}
+
 
 if __name__ == '__main__':
     app.run(port=8080, host='127.0.0.1')

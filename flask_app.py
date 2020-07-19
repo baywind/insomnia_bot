@@ -2,9 +2,8 @@
 # A very simple Flask Hello World app for you to get started with...
 
 from flask import Flask, request
+from secrets import TARGET_CHAT_ID
 import json
-
-TARGET_CHAT_ID = 123
 
 app = Flask(__name__)
 
@@ -25,6 +24,8 @@ def get_update():
             'message_id': js['message']['message_id'],
             "ok": True
         }
+        if chat_id == TARGET_CHAT_ID:
+            result['chat_id'] = js['reply_to_message']['forward_from']['id']
         # print(js['message'])
         return result
     else:

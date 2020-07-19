@@ -14,7 +14,7 @@ def hello_world():
 @app.route('/bot', methods=['POST'])
 def get_update():
     js = request.json
-    print(js)
+    print(request.get_data(as_text=True))
     if 'message' in js:
         chat_id = js['message']['chat']['id']
         result = {

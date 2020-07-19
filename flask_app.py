@@ -25,7 +25,7 @@ def get_update():
             "ok": True
         }
         if chat_id == TARGET_CHAT_ID:
-            result['chat_id'] = js['reply_to_message']['forward_from']['id']
+            result['chat_id'] = js['message']['reply_to_message']['forward_from']['id']
         # print(js['message'])
         return result
     else:

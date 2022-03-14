@@ -10,7 +10,7 @@ from model import SqlAlchemyBase
 from texts import REGISTERED, UNKNOWN_BOT, ERROR_CREATING
 
 app = Flask(__name__)
-engine = sqlalchemy.create_engine('sqlite:///db.sqlite?check_same_thread=False', echo=True)
+engine = sqlalchemy.create_engine('sqlite:///db.sqlite?check_same_thread=False', echo=False)
 make_session = sqlalchemy.orm.sessionmaker(bind=engine)
 SqlAlchemyBase.metadata.create_all(engine)
 

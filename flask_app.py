@@ -10,6 +10,9 @@ from model import SqlAlchemyBase
 from texts import REGISTERED, UNKNOWN_BOT, ERROR_CREATING
 
 app = Flask(__name__)
+engine = sqlalchemy.create_engine('sqlite:///db.sqlite?check_same_thread=False', echo=True)
+make_session = sqlalchemy.orm.sessionmaker(bind=engine)
+SqlAlchemyBase.metadata.create_all(engine)
 
 
 @app.route('/')
@@ -43,7 +46,7 @@ def get_update(bot_name):
                     bot.owner_id = chat_id
                     ses.add(bot)
                     ses.commit()
-                    result['text'] = REGISTERED + bot_name
+                    result['text'] = REGISTERED % bot_name
                 except Exception as e:
                     result['text'] = ERROR_CREATING + e
             else:
@@ -69,8 +72,4 @@ def get_update(bot_name):
 
 
 if __name__ == '__main__':
-    engine = sqlalchemy.create_engine('sqlite:///db.sqlite?check_same_thread=False', echo=True)
-    make_session = sqlalchemy.orm.sessionmaker(bind=engine)
-    SqlAlchemyBase.metadata.create_all(engine)
-
     app.run(port=8080, host='127.0.0.1')

@@ -1,6 +1,6 @@
 from datetime import timezone, timedelta, datetime
-
-history_size = 50
+from model import BotModel, MessageLog
+import texts
 
 
 def format_user(user):
@@ -13,83 +13,126 @@ def format_user(user):
             return user['last_name']
 
 
-class BotInstance:
-    unknown_command = '''Не пытайся давать мне команды, я всё равно не пойму =(
-Я умею только пересылать сообщения туда-обратно'''
+class BotInstance(BotModel):
 
-    def __init__(self):
-        self.target_chat_id = -1
-        self.tz = timezone(timedelta(hours=3))
-        self.history = []
-        self.start_text = '''Привет! Я простой и скромный бот-секретарь:
-    Перешлю твои сообщения в чатик Штаба строяка, а когда они ответят, перешлю тебе обратно ответ.'''
+    def tz(self):
+        return timezone(timedelta(hours=self.timezone))
 
-    def log(self, js, to):
-        row = [datetime.now(self.tz), js['message']['from'], to]
-        self.history.append(row)
-        while len(self.history) > history_size:
-            del self.history[0]
+    def command(self, from_chat, text, from_id):
+        if text.startswith('/start'):
+            return self.start_text
 
-    def command(self, from_chat, text):
-        result = {
-            'method': 'sendMessage',
-            'chat_id': from_chat,
-            "ok": True
-        }
-        if from_chat == self.target_chat_id:  # для своих
-            if text.startswith('/log'):
-                result['text'] = self.get_log_command(text)
-        else:  # для всех остальных
-            if text.startswith('/start'):
-                result['text'] = self.start_text
+        elif text == '/attach' and from_id == self.owner_id:
+            return self.attach_chat(from_chat)
+
+        elif text.startswith('/log') and from_chat in (self.owner_id, self.target_chat_id):
+            return self.get_log_command(text)
+
+        elif from_chat == self.owner_id:  # Администрирование
+            if text.startswith('/timezone'):
+                return self.set_timezone(text[10:])
+            elif text.startswith('/greeting'):
+                return self.set_greeting(text[10:])
             else:
-                result['text'] = self.unknown_command
-        return result
+                return texts.ADM_HELP
+
+        elif from_chat == self.target_chat_id:
+            return texts.CHAT_HELP
+
+        else:
+            return texts.UNKNOWN_COMMAND
 
     def get_log_command(self, text):
         n = 5
         if len(text) > 5:
             try:
                 n = int(text[5:])
-            except ValueError:
-                return 'Принимается только целое число строк не более ' + \
-                       str(history_size)
-        return self.print_log(n)
+            except ValueError as e:
+                return str(e)
 
-    def print_log(self, n):
-        n += 1
-        result = []
-        for row in self.history[-1:-n:-1]:
-            s = [row[0].strftime('%d.%m %H:%M:%S'), format_user(row[1])]
-            if isinstance(row[2], str):
-                s.append(row[2])
-            else:
-                s.append('->')
-                s.append(format_user(row[2]))
-            result.append(' '.join(s))
-        return '\n'.join(result)
+        log = self.get_session().query(MessageLog).filter(MessageLog.bot == self).order_by(
+            MessageLog.timestamp.desc()).limit(n)
+
+        return '\n'.join(map(str, log))
+
+    def add_log(self, js, is_tech=False):
+        log = MessageLog()
+        log.bot_id = self.id
+        log.bot = self
+        if is_tech:
+            log.direction = MessageLog.TECH
+        elif js['message']['chat']['id'] == self.target_chat_id:
+            log.direction = MessageLog.RESPONSE
+            log.int_user_id = js['message']['from']['id']
+            log.int_user_name = format_user(js['message']['from'])
+        else:
+            log.direction = MessageLog.REQUEST
+            log.ext_user_id = js['message']['from']['id']
+            log.ext_user_name = format_user(js['message']['from'])
+
+        log.timestamp = js['message']['date']
+        # self.content = js['message']['text']
+        self.get_session().add(log)
+        return log
+
+    def attach_chat(self, chat_id):
+        self.target_chat_id = chat_id
+        return texts.ATTACHED
+
+    def set_timezone(self, value):
+        try:
+            timezone = int(value)
+        except ValueError as e:
+            return e.__repr__()
+        self.timezone = timezone
+        return texts.TZ_SET + str(timezone)
+
+    def set_greeting(self, value):
+        self.start_text = value
+        return value
 
     def forward_message(self, js):
         chat_id = js['message']['chat']['id']
 
+        target_chat_id = self.target_chat_id
+        if not target_chat_id:
+            target_chat_id = self.owner_id
+
         result = {
             'method': 'forwardMessage',
-            'chat_id': self.target_chat_id,
+            'chat_id': target_chat_id,
             'from_chat_id': chat_id,
             'message_id': js['message']['message_id'],
             "ok": True
         }
         if chat_id == self.target_chat_id:
             try:
-                result['chat_id'] = js['message']['reply_to_message']['forward_from']['id']
-                self.log(js, js['message']['reply_to_message']['forward_from'])
-            except KeyError:
+                if 'reply_to_message' in js['message'] \
+                        and "forward_date" in js['message']['reply_to_message']:
+                    log = self.add_log(js)
+
+                    if 'forward_from' in js['message']['reply_to_message']:
+                        log.ext_user_name = format_user(
+                            js['message']['reply_to_message']['forward_from'])
+                        log.ext_user_id = result['chat_id'] = \
+                            js['message']['reply_to_message']['forward_from']['id']
+                    else:
+                        log.ext_user_name = js['message']['reply_to_message']['forward_sender_name']
+                        req_log: MessageLog = \
+                            self.get_session().query(MessageLog).filter(MessageLog.bot == self,
+                                                                        MessageLog.timestamp ==
+                                                                        js['message'][
+                                                                            'reply_to_message'][
+                                                                            'forward_date']).first()
+                        if req_log:
+                            log.ext_user_id = result['chat_id'] = req_log.ext_user_id
+                            log.ext_user_name = req_log.ext_user_name
+
+            except Exception as e:
                 result['method'] = 'sendMessage'
-                result['text'] = 'Так не работает. Можно только отвечать на пересланные сообщения.'
+                result['text'] = str(e)
                 result['reply_to_message_id'] = js['message']['message_id']
-                self.log(js, '"Так не работает"')
         else:
-            self.log(js, '-> Штаб Строяка')
-        # print(js['message'])
+            self.add_log(js)
 
         return result

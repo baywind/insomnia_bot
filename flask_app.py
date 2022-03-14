@@ -39,7 +39,7 @@ def get_update(bot_name):
                 'chat_id': chat_id,
                 'ok': True
             }
-            if chat_id > 0 and js['message']['text'] == '/register':
+            if chat_id > 0 and 'text' in msg and msg['text'] == '/register':
                 try:
                     bot = BotInstance()
                     bot.name = bot_name

@@ -106,9 +106,9 @@ class BotInstance(BotModel):
             "ok": True
         }
         if chat_id == self.target_chat_id:
-            try:
-                if 'reply_to_message' in js['message'] \
-                        and "forward_date" in js['message']['reply_to_message']:
+            if 'reply_to_message' in js['message'] \
+                    and "forward_date" in js['message']['reply_to_message']:
+                try:
                     log = self.add_log(js)
 
                     if 'forward_from' in js['message']['reply_to_message']:
@@ -128,10 +128,12 @@ class BotInstance(BotModel):
                             log.ext_user_id = result['chat_id'] = req_log.ext_user_id
                             log.ext_user_name = req_log.ext_user_name
 
-            except Exception as e:
-                result['method'] = 'sendMessage'
-                result['text'] = str(e)
-                result['reply_to_message_id'] = js['message']['message_id']
+                except Exception as e:
+                    result['method'] = 'sendMessage'
+                    result['text'] = str(e)
+                    result['reply_to_message_id'] = js['message']['message_id']
+            else:
+                return {"ok": True}
         else:
             self.add_log(js)
 

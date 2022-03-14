@@ -17,7 +17,7 @@ SqlAlchemyBase.metadata.create_all(engine)
 
 @app.route('/')
 def hello_world():
-    return 'Test site is working!'
+    return 'Forwarder bot service is running!'
 
 
 @app.route('/<bot_name>', methods=['POST'])
@@ -54,9 +54,9 @@ def get_update(bot_name):
             return result
 
         if 'text' in msg and msg['text'].startswith('/'):  # обработка команды
-            text = bot.command(js['message']['chat']['id'],
-                               js['message']['text'],
-                               js['message']['from']['id'])
+            text = bot.command(msg['chat']['id'],
+                               msg['text'],
+                               msg['from']['id'])
             result = {
                 'method': 'sendMessage',
                 'chat_id': js['message']['chat']['id'],

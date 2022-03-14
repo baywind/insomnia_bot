@@ -28,7 +28,8 @@ def get_update(bot_name):
         ses: sqlalchemy.orm.Session = make_session()
         bot: BotInstance = ses.query(BotInstance).filter(BotInstance.name == bot_name).first()
 
-        chat_id = js['message']['chat']['id']
+        msg = js['message']
+        chat_id = msg['chat']['id']
         if not bot:
             result = {
                 'method': 'sendMessage',
@@ -49,7 +50,7 @@ def get_update(bot_name):
                 result['text'] = UNKNOWN_BOT
             return result
 
-        if js['message']['text'].startswith('/'):  # обработка команды
+        if 'text' in msg and msg['text'].startswith('/'):  # обработка команды
             text = bot.command(js['message']['chat']['id'],
                                js['message']['text'],
                                js['message']['from']['id'])

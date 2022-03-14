@@ -118,12 +118,10 @@ class BotInstance(BotModel):
                             js['message']['reply_to_message']['forward_from']['id']
                     else:
                         log.ext_user_name = js['message']['reply_to_message']['forward_sender_name']
-                        req_log: MessageLog = \
-                            self.get_session().query(MessageLog).filter(MessageLog.bot == self,
-                                                                        MessageLog.timestamp ==
-                                                                        js['message'][
-                                                                            'reply_to_message'][
-                                                                            'forward_date']).first()
+                        timestamp = js['message']['reply_to_message']['forward_date']
+                        req_log: MessageLog = self.get_session().query(MessageLog). \
+                            filter(MessageLog.bot == self,
+                                   MessageLog.timestamp == timestamp).first()
                         if req_log:
                             log.ext_user_id = result['chat_id'] = req_log.ext_user_id
                             log.ext_user_name = req_log.ext_user_name

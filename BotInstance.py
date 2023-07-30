@@ -56,7 +56,8 @@ class BotInstance(BotModel):
             if 'forward_from' in quote:
                 ext_user_id = quote['forward_from']['id']
             else:
-                log = self.get_session().query(MessageLog).filter(MessageLog.timestamp == quote['date']).first()
+                log = self.get_session().query(MessageLog).filter(
+                    (MessageLog.timestamp == quote['date']) | (MessageLog.timestamp == quote['forward_date'])).first()
                 if log:
                     ext_user_id = log.ext_user_id
             if ext_user_id:

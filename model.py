@@ -49,7 +49,7 @@ class MessageLog(SqlAlchemyBase):
 
     bot_id = sqlalchemy.Column(sqlalchemy.Integer,
                                sqlalchemy.ForeignKey("registered_bot.id"), index=True)
-    bot = sqlalchemy.orm.relation('BotInstance')
+    bot = sqlalchemy.orm.relationship('BotInstance')
 
     def __str__(self):
         date = datetime.datetime.fromtimestamp(self.timestamp, self.bot.tz())\

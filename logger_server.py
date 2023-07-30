@@ -1,5 +1,4 @@
 from flask import Flask, request
-from secrets import TARGET_CHAT_ID
 from datetime import datetime, timedelta, timezone
 import json
 

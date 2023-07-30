@@ -18,7 +18,7 @@ class BotInstance(BotModel):
     def tz(self):
         return timezone(timedelta(hours=self.timezone))
 
-    def command(self, from_chat, text, from_id):
+    def command(self, from_chat, text, from_id, quote):
         if text.startswith('/start'):
             return self.start_text
 
@@ -26,7 +26,7 @@ class BotInstance(BotModel):
             return self.attach_chat(from_chat)
 
         elif text.startswith('/log') and from_chat in (self.owner_id, self.target_chat_id):
-            return self.get_log_command(text)
+            return self.get_log_command(text, quote)
 
         elif from_chat == self.owner_id:  # Администрирование
             if text.startswith('/timezone'):
@@ -42,7 +42,7 @@ class BotInstance(BotModel):
         else:
             return texts.UNKNOWN_COMMAND
 
-    def get_log_command(self, text):
+    def get_log_command(self, text, quote):
         n = 5
         if len(text) > 5:
             try:
@@ -50,7 +50,18 @@ class BotInstance(BotModel):
             except ValueError as e:
                 return str(e)
 
-        log = self.get_session().query(MessageLog).filter(MessageLog.bot == self).order_by(
+        criteria = (MessageLog.bot == self)
+        if quote:
+            ext_user_id = None
+            if 'forward_from' in quote:
+                ext_user_id = quote['forward_from']['id']
+            else:
+                log = self.get_session().query(MessageLog).filter(MessageLog.timestamp == quote['date']).first()
+                if log:
+                    ext_user_id = log.ext_user_id
+            if ext_user_id:
+                criteria = criteria & (MessageLog.ext_user_id == ext_user_id)
+        log = self.get_session().query(MessageLog).filter(criteria).order_by(
             MessageLog.timestamp.desc()).limit(n)
 
         return '\n'.join(map(str, log))

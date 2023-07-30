@@ -54,9 +54,13 @@ def get_update(bot_name):
             return result
 
         if 'text' in msg and msg['text'].startswith('/'):  # обработка команды
+            quote = None
+            if 'reply_to_message' in msg:
+                quote = msg['reply_to_message']
             text = bot.command(msg['chat']['id'],
                                msg['text'],
-                               msg['from']['id'])
+                               msg['from']['id'],
+                               quote)
             result = {
                 'method': 'sendMessage',
                 'chat_id': js['message']['chat']['id'],

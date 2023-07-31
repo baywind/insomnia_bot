@@ -51,15 +51,8 @@ class BotInstance(BotModel):
                 return str(e)
 
         criteria = (MessageLog.bot == self)
-        if quote:
-            ext_user_id = None
-            if 'forward_from' in quote:
-                ext_user_id = quote['forward_from']['id']
-            else:
-                log = self.get_session().query(MessageLog).filter(
-                    (MessageLog.timestamp == quote['date']) | (MessageLog.timestamp == quote['forward_date'])).first()
-                if log:
-                    ext_user_id = log.ext_user_id
+        if quote and "forward_date" in quote:
+            ext_user_id, ext_user_name = self.user_from_quote(quote)
             if ext_user_id:
                 criteria = criteria & (MessageLog.ext_user_id == ext_user_id)
         log = self.get_session().query(MessageLog).filter(criteria).order_by(
@@ -122,21 +115,9 @@ class BotInstance(BotModel):
                     and "forward_date" in js['message']['reply_to_message']:
                 try:
                     log = self.add_log(js)
-
-                    if 'forward_from' in js['message']['reply_to_message']:
-                        log.ext_user_name = format_user(
-                            js['message']['reply_to_message']['forward_from'])
-                        log.ext_user_id = result['chat_id'] = \
-                            js['message']['reply_to_message']['forward_from']['id']
-                    else:
-                        log.ext_user_name = js['message']['reply_to_message']['forward_sender_name']
-                        timestamp = js['message']['reply_to_message']['forward_date']
-                        req_log: MessageLog = self.get_session().query(MessageLog). \
-                            filter(MessageLog.bot == self,
-                                   MessageLog.timestamp == timestamp).first()
-                        if req_log:
-                            log.ext_user_id = result['chat_id'] = req_log.ext_user_id
-                            log.ext_user_name = req_log.ext_user_name
+                    ext_user_id, log.ext_user_name = self.user_from_quote(js['message']['reply_to_message'])
+                    if ext_user_id:
+                        log.ext_user_id = result['chat_id'] = ext_user_id
 
                 except Exception as e:
                     result['method'] = 'sendMessage'
@@ -148,3 +129,21 @@ class BotInstance(BotModel):
             self.add_log(js)
 
         return result
+
+    def user_from_quote(self, quote):
+        if 'forward_from' in quote:
+            ext_user_name = format_user(quote['forward_from'])
+            ext_user_id = quote['forward_from']['id']
+        else:
+            ext_user_name = quote['forward_sender_name']
+            timestamp = quote['forward_date']
+            req_log: MessageLog = self.get_session().query(MessageLog). \
+                filter(MessageLog.bot == self,
+                       MessageLog.timestamp == timestamp).first()
+            if req_log:
+                ext_user_id = req_log.ext_user_id
+                ext_user_name = req_log.ext_user_name
+            else:
+                ext_user_id = None
+
+        return ext_user_id, ext_user_name

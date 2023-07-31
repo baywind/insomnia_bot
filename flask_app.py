@@ -57,15 +57,17 @@ def get_update(bot_name):
             quote = None
             if 'reply_to_message' in msg:
                 quote = msg['reply_to_message']
+            entities = []
             text = bot.command(msg['chat']['id'],
                                msg['text'],
                                msg['from']['id'],
-                               quote)
+                               quote, entities)
             result = {
                 'method': 'sendMessage',
                 'chat_id': js['message']['chat']['id'],
                 'text': text,
-                'ok': True
+                'ok': True,
+                'entities': entities
             }
         else:
             result = bot.forward_message(js)

@@ -18,7 +18,7 @@ class BotInstance(BotModel):
     def tz(self):
         return timezone(timedelta(hours=self.timezone))
 
-    def command(self, from_chat, text, from_id, quote):
+    def command(self, from_chat, text, from_id, quote, entities):
         if text.startswith('/start'):
             return self.start_text
 
@@ -26,7 +26,7 @@ class BotInstance(BotModel):
             return self.attach_chat(from_chat)
 
         elif text.startswith('/log') and from_chat in (self.owner_id, self.target_chat_id):
-            return self.get_log_command(text, quote)
+            return self.get_log_command(text, quote, entities)
 
         elif from_chat == self.owner_id:  # Администрирование
             if text.startswith('/timezone'):
@@ -42,7 +42,7 @@ class BotInstance(BotModel):
         else:
             return texts.UNKNOWN_COMMAND
 
-    def get_log_command(self, text, quote):
+    def get_log_command(self, text, quote, entities: list):
         n = 5
         if len(text) > 5:
             try:
@@ -58,7 +58,29 @@ class BotInstance(BotModel):
         log = self.get_session().query(MessageLog).filter(criteria).order_by(
             MessageLog.timestamp.desc()).limit(n)
 
-        return '\n'.join(map(str, log))
+        result = []  # '\n'.join(map(str, log))
+        offset = 0
+        for record in log:
+            row = str(record)
+            name: str = record.ext_user_name
+            if not name.startswith('@'):
+                try:
+                    entities.append(
+                        {
+                            "offset": offset + row.index(name),
+                            "length": len(name),
+                            "type": "text_mention",
+                            "user": {
+                                "id": record.ext_user_id,
+                                "is_bot": False
+                            }
+                        }
+                    )
+                except ValueError:
+                    pass
+            result.append(row)
+            offset += len(row) + 1
+        return '\n'.join(result)
 
     def add_log(self, js, is_tech=False):
         log = MessageLog()

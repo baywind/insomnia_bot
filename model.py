@@ -60,3 +60,29 @@ class MessageLog(SqlAlchemyBase):
             return f'{date} {self.ext_user_name} -> {self.bot.name}'
         elif self.direction == 2:
             return f'{date} {self.ext_user_name} <- {self.int_user_name}'
+
+    @classmethod
+    def format_log(cls, log, entities):
+        result = []  # '\n'.join(map(str, log))
+        offset = 0
+        for record in log:
+            row = str(record)
+            name: str = record.ext_user_name
+            if not name.startswith('@'):
+                try:
+                    entities.append(
+                        {
+                            "offset": offset + row.index(name),
+                            "length": len(name),
+                            "type": "text_mention",
+                            "user": {
+                                "id": record.ext_user_id,
+                                "is_bot": False
+                            }
+                        }
+                    )
+                except ValueError:
+                    pass
+            result.append(row)
+            offset += len(row) + 1
+        return '\n'.join(result)

@@ -1,5 +1,6 @@
 from datetime import timezone, timedelta, datetime
 from model import BotModel, MessageLog
+from sqlalchemy import func
 import texts
 
 
@@ -7,10 +8,12 @@ def format_user(user):
     if 'username' in user:
         return '@' + user['username']
     else:
+        result = []
         if 'first_name' in user:
-            return user['first_name']
+            result.append(user['first_name'])
         if 'last_name' in user:
-            return user['last_name']
+            result.append(user['last_name'])
+        return ' '.join(result)
 
 
 class BotInstance(BotModel):
@@ -27,6 +30,9 @@ class BotInstance(BotModel):
 
         elif text.startswith('/log') and from_chat in (self.owner_id, self.target_chat_id):
             return self.get_log_command(text, quote, entities)
+
+        elif text.startswith('/dialogs') and from_chat in (self.owner_id, self.target_chat_id):
+            return self.dialogs_command(text, entities)
 
         elif from_chat == self.owner_id:  # Администрирование
             if text.startswith('/timezone'):
@@ -58,29 +64,30 @@ class BotInstance(BotModel):
         log = self.get_session().query(MessageLog).filter(criteria).order_by(
             MessageLog.timestamp.desc()).limit(n)
 
-        result = []  # '\n'.join(map(str, log))
-        offset = 0
-        for record in log:
-            row = str(record)
-            name: str = record.ext_user_name
-            if not name.startswith('@'):
-                try:
-                    entities.append(
-                        {
-                            "offset": offset + row.index(name),
-                            "length": len(name),
-                            "type": "text_mention",
-                            "user": {
-                                "id": record.ext_user_id,
-                                "is_bot": False
-                            }
-                        }
-                    )
-                except ValueError:
-                    pass
-            result.append(row)
-            offset += len(row) + 1
-        return '\n'.join(result)
+        return MessageLog.format_log(log, entities)
+
+    def dialogs_command(self, text, entities: list):
+        n = 5
+        if len(text) > 9:
+            try:
+                n = int(text[9:])
+            except ValueError as e:
+                return str(e)
+
+        criteria = (MessageLog.bot == self)
+        session = self.get_session()
+
+        subquery = session.query(func.max(MessageLog.id).label('last'))\
+            .filter(MessageLog.bot_id == 2)\
+            .group_by(MessageLog.ext_user_name)\
+            .order_by(MessageLog.id.desc())\
+            .limit(n)
+
+        query = session.query(MessageLog)\
+            .filter(MessageLog.id.in_(subquery))\
+            .order_by(MessageLog.timestamp.desc())
+
+        return MessageLog.format_log(query, entities)
 
     def add_log(self, js, is_tech=False):
         log = MessageLog()

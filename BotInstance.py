@@ -162,17 +162,18 @@ class BotInstance(BotModel):
     def user_from_quote(self, quote):
         if 'forward_from' in quote:
             ext_user_name = format_user(quote['forward_from'])
-            ext_user_id = quote['forward_from']['id']
+            # ext_user_id = quote['forward_from']['id']
         else:
             ext_user_name = quote['forward_sender_name']
-            timestamp = quote['forward_date']
-            req_log: MessageLog = self.get_session().query(MessageLog). \
-                filter(MessageLog.bot == self,
-                       MessageLog.timestamp == timestamp).first()
-            if req_log:
-                ext_user_id = req_log.ext_user_id
-                ext_user_name = req_log.ext_user_name
-            else:
-                ext_user_id = None
+
+        timestamp = quote['forward_date']
+        req_log: MessageLog = self.get_session().query(MessageLog). \
+            filter(MessageLog.bot == self,
+                   MessageLog.timestamp == timestamp).first()
+        if req_log:
+            ext_user_id = req_log.ext_user_id
+            ext_user_name = req_log.ext_user_name
+        else:
+            ext_user_id = None
 
         return ext_user_id, ext_user_name

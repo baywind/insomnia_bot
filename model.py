@@ -30,6 +30,7 @@ class BotModel(SqlAlchemyBase):
 
 
 class MessageLog(SqlAlchemyBase):
+    EMPTY_NAME = "<noname>"
     __tablename__ = 'message_log'
     REQUEST = 1
     RESPONSE = 2
@@ -54,12 +55,14 @@ class MessageLog(SqlAlchemyBase):
     def __str__(self):
         date = datetime.datetime.fromtimestamp(self.timestamp, self.bot.tz())\
             .strftime('%d.%m %H:%M:%S')
+        int_user_name = self.int_user_name or self.EMPTY_NAME
+        ext_user_name = self.ext_user_name or self.EMPTY_NAME
         if self.direction == 0:
-            return f'{date} {self.int_user_name} # {self.ext_user_name}'
+            return f'{date} {int_user_name} # {ext_user_name}'
         elif self.direction == 1:
-            return f'{date} {self.ext_user_name} -> {self.bot.name}'
+            return f'{date} {ext_user_name} -> {self.bot.name}'
         elif self.direction == 2:
-            return f'{date} {self.ext_user_name} <- {self.int_user_name}'
+            return f'{date} {ext_user_name} <- {int_user_name}'
 
     @classmethod
     def format_log(cls, log, entities):
@@ -67,7 +70,7 @@ class MessageLog(SqlAlchemyBase):
         offset = 0
         for record in log:
             row = str(record)
-            name: str = record.ext_user_name
+            name: str = record.ext_user_name or record.EMPTY_NAME
             if not name.startswith('@'):
                 try:
                     entities.append(

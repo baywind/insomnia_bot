@@ -1,8 +1,9 @@
 from datetime import timezone, timedelta, datetime
-from model import BotModel, MessageLog
+from model import BotModel, MessageLog, Blacklist
 from sqlalchemy import func
 import texts
 
+MAX_DELAY = 10
 
 def format_user(user):
     if 'username' in user:
@@ -21,11 +22,11 @@ class BotInstance(BotModel):
     def tz(self):
         return timezone(timedelta(hours=self.timezone))
 
-    def command(self, from_chat, text, from_id, quote, entities):
+    def command(self, from_chat, text, from_user, quote, entities):
         if text.startswith('/start'):
             return self.start_text
 
-        elif text == '/attach' and from_id == self.owner_id:
+        elif text == '/attach' and from_user['id'] == self.owner_id:
             return self.attach_chat(from_chat)
 
         elif text.startswith('/log') and from_chat in (self.owner_id, self.target_chat_id):
@@ -33,6 +34,16 @@ class BotInstance(BotModel):
 
         elif text.startswith('/dialogs') and from_chat in (self.owner_id, self.target_chat_id):
             return self.dialogs_command(text, entities)
+
+        elif text.startswith('/ban') and from_chat in (self.owner_id, self.target_chat_id):
+            return self.ban_command(quote, from_user)
+
+        elif text.startswith('/unban') and from_chat in (self.owner_id, self.target_chat_id):
+            return self.unban_command(text)
+
+        elif text.startswith('/blacklist') and from_chat in (self.owner_id, self.target_chat_id):
+            return self.blacklist_command()
+
 
         elif from_chat == self.owner_id:  # Администрирование
             if text.startswith('/timezone'):
@@ -77,14 +88,14 @@ class BotInstance(BotModel):
         criteria = (MessageLog.bot == self)
         session = self.get_session()
 
-        subquery = session.query(func.max(MessageLog.id).label('last'))\
-            .filter(MessageLog.bot == self)\
-            .group_by(MessageLog.ext_user_name)\
-            .order_by(MessageLog.id.desc())\
+        subquery = session.query(func.max(MessageLog.id).label('last')) \
+            .filter(MessageLog.bot == self) \
+            .group_by(MessageLog.ext_user_name) \
+            .order_by(MessageLog.id.desc()) \
             .limit(n)
 
-        query = session.query(MessageLog)\
-            .filter(MessageLog.id.in_(subquery))\
+        query = session.query(MessageLog) \
+            .filter(MessageLog.id.in_(subquery)) \
             .order_by(MessageLog.timestamp.desc())
 
         return MessageLog.format_log(query, entities)
@@ -125,6 +136,55 @@ class BotInstance(BotModel):
         self.start_text = value
         return value
 
+    def ban_command(self, quote, from_user):
+        if not (quote and "forward_date" in quote):
+            return texts.SHOULD_REPLY
+        ext_user_id, ext_user_name = self.user_from_quote(quote)
+
+        if not (ext_user_id and ext_user_name):
+            return "Failed"
+
+        ban = Blacklist()
+        ban.bot_id = self.id
+        ban.bot = self
+        ban.user_id = ext_user_id
+        ban.name = ext_user_name
+        ban.added_by = format_user(from_user)
+
+        self.get_session().add(ban)
+
+        return self.blacklist_command()
+
+    def blacklist_command(self):
+        if self.blacklist:
+            return texts.BLACKLIST + '\n'.join(map(str, self.blacklist))
+        else:
+            return texts.EMPTY_BLACKLIST
+
+    def unban_command(self, text):
+        if not self.blacklist:
+            return texts.EMPTY_BLACKLIST
+
+        if len(text) > 7:
+            try:
+                unban_id = int(text[7:])
+            except ValueError as e:
+                return str(e) + '\n' + texts.ID_FOR_UNBAN
+        else:
+            return texts.ID_FOR_UNBAN
+
+        result = texts.UNBANNED
+        for user in self.blacklist:
+            if user.user_id == unban_id:
+                result += ' ' + str(user.name)
+                self.get_session().delete(user)
+
+        if result == texts.UNBANNED:
+            return texts.ID_FOR_UNBAN
+
+        return result
+
+
     def forward_message(self, js):
         chat_id = js['message']['chat']['id']
 
@@ -155,25 +215,40 @@ class BotInstance(BotModel):
             else:
                 return {"ok": True}
         else:
-            self.add_log(js)
+            log = self.add_log(js)
+            if self.blacklist and chat_id in (b.user_id for b in self.blacklist):
+                result['chat_id'] = chat_id
+                log.direction = MessageLog.DENIED
+            elif "forward_date" in js['message']:
+                log.int_user_id = js['message']['forward_date'] ## for searching
 
         return result
 
     def user_from_quote(self, quote):
         if 'forward_from' in quote:
             ext_user_name = format_user(quote['forward_from'])
-            # ext_user_id = quote['forward_from']['id']
         else:
             ext_user_name = quote['forward_sender_name']
+        ext_user_id = None
 
-        timestamp = quote['forward_date']
+        forward_date: int = quote['forward_date']
+
         req_log: MessageLog = self.get_session().query(MessageLog). \
             filter(MessageLog.bot == self,
-                   MessageLog.timestamp == timestamp).first()
+                   MessageLog.timestamp == forward_date,
+                   MessageLog.ext_user_name == ext_user_name).first()
+
+        if not req_log:
+            date: int = quote['date']
+            req_log: MessageLog = self.get_session().query(MessageLog). \
+                filter(MessageLog.bot == self,
+                       MessageLog.int_user_id == forward_date,
+                       MessageLog.timestamp <= date,
+                       MessageLog.timestamp > date - MAX_DELAY
+                       ).first()
+
         if req_log:
             ext_user_id = req_log.ext_user_id
             ext_user_name = req_log.ext_user_name
-        else:
-            ext_user_id = None
 
         return ext_user_id, ext_user_name

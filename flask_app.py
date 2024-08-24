@@ -60,7 +60,7 @@ def get_update(bot_name):
             entities = []
             text = bot.command(msg['chat']['id'],
                                msg['text'],
-                               msg['from']['id'],
+                               msg['from'],
                                quote, entities)
             result = {
                 'method': 'sendMessage',

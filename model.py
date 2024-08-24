@@ -20,7 +20,7 @@ class BotModel(SqlAlchemyBase):
     created_date = sqlalchemy.Column(sqlalchemy.DateTime,
                                      default=datetime.datetime.now)
 
-    # news = sqlalchemy.orm.relation("MessageLog", back_populates='bot')
+    blacklist = sqlalchemy.orm.relationship("Blacklist", back_populates='bot')
 
     def __repr__(self):
         return f'<bot: @{self.name}>'
@@ -35,6 +35,7 @@ class MessageLog(SqlAlchemyBase):
     REQUEST = 1
     RESPONSE = 2
     TECH = 0
+    DENIED = 9
 
     id = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True, autoincrement=True)
     direction = sqlalchemy.Column(sqlalchemy.Integer, nullable=False, default=0)
@@ -53,16 +54,18 @@ class MessageLog(SqlAlchemyBase):
     bot = sqlalchemy.orm.relationship('BotInstance')
 
     def __str__(self):
-        date = datetime.datetime.fromtimestamp(self.timestamp, self.bot.tz())\
+        date = datetime.datetime.fromtimestamp(self.timestamp, self.bot.tz()) \
             .strftime('%d.%m %H:%M:%S')
         int_user_name = self.int_user_name or self.EMPTY_NAME
         ext_user_name = self.ext_user_name or self.EMPTY_NAME
-        if self.direction == 0:
+        if self.direction == self.TECH:
             return f'{date} {int_user_name} # {ext_user_name}'
-        elif self.direction == 1:
+        elif self.direction == self.REQUEST:
             return f'{date} {ext_user_name} -> {self.bot.name}'
-        elif self.direction == 2:
+        elif self.direction == self.RESPONSE:
             return f'{date} {ext_user_name} <- {int_user_name}'
+        elif self.direction == self.DENIED:
+            return f'{date} {ext_user_name} -> X'
 
     @classmethod
     def format_log(cls, log, entities):
@@ -89,3 +92,24 @@ class MessageLog(SqlAlchemyBase):
             result.append(row)
             offset += len(row) + 1
         return '\n'.join(result)
+
+
+class Blacklist(SqlAlchemyBase):
+    __tablename__ = 'blacklist'
+
+    id = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True, autoincrement=True)
+    name = sqlalchemy.Column(sqlalchemy.String, nullable=False)
+    user_id = sqlalchemy.Column(sqlalchemy.BigInteger, nullable=False)
+    added_by = sqlalchemy.Column(sqlalchemy.String, nullable=False)
+
+    created_date = sqlalchemy.Column(sqlalchemy.DateTime,
+                                     default=datetime.datetime.now)
+
+    bot_id = sqlalchemy.Column(sqlalchemy.Integer,
+                               sqlalchemy.ForeignKey("registered_bot.id"), index=True)
+    bot = sqlalchemy.orm.relationship('BotInstance')
+
+    def __str__(self):
+        return f'{self.user_id}: {self.name} (by {self.added_by})'
+    def __repr__(self):
+        return f'<blacklist: {self.name}>'

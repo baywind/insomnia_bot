@@ -78,7 +78,7 @@ class BotInstance(BotModel):
         session = self.get_session()
 
         subquery = session.query(func.max(MessageLog.id).label('last'))\
-            .filter(MessageLog.bot_id == 2)\
+            .filter(MessageLog.bot == self)\
             .group_by(MessageLog.ext_user_name)\
             .order_by(MessageLog.id.desc())\
             .limit(n)
